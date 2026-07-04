@@ -246,22 +246,61 @@ function drawLayer(color, factor, height, base) {
 }
 
 function drawPlayer() {
-  const radius = 7;
   const x = player.x;
   const y = player.y;
   const size = player.size;
+  const centerX = x + size * 0.5;
+  const headRadius = size * 0.18;
+  const headY = y + size * 0.16;
+  const shoulderY = y + size * 0.38;
+  const hipY = y + size * 0.66;
+  const footY = y + size;
+  const stride = player.grounded ? Math.sin(state.distance * 0.045) : 0.45;
+  const counterStride = -stride;
+  const armSwing = stride * size * 0.18;
+  const legSwing = stride * size * 0.2;
+  const backLegSwing = counterStride * size * 0.2;
+
+  ctx.save();
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+
+  ctx.strokeStyle = "rgba(15, 23, 42, 0.34)";
+  ctx.lineWidth = size * 0.12;
+  drawLimb(centerX + size * 0.02, shoulderY, centerX - size * 0.2, y + size * 0.55 + armSwing);
+  drawLimb(centerX - size * 0.02, hipY, centerX - size * 0.12 + backLegSwing, footY - size * 0.06);
+
+  ctx.strokeStyle = "#facc15";
+  ctx.lineWidth = size * 0.1;
+  drawLimb(centerX + size * 0.02, shoulderY, centerX + size * 0.25, y + size * 0.55 - armSwing);
+  drawLimb(centerX + size * 0.02, hipY, centerX + size * 0.18 + legSwing, footY - size * 0.04);
+
+  ctx.strokeStyle = "#f8fafc";
+  ctx.lineWidth = size * 0.14;
+  drawLimb(centerX, shoulderY, centerX + size * 0.03, hipY);
 
   ctx.fillStyle = "#f8fafc";
-  roundRect(x, y, size, size, radius);
+  ctx.beginPath();
+  ctx.arc(centerX + size * 0.04, headY, headRadius, 0, Math.PI * 2);
   ctx.fill();
 
   ctx.fillStyle = "#111827";
   ctx.beginPath();
-  ctx.arc(x + size * 0.65, y + size * 0.34, size * 0.08, 0, Math.PI * 2);
+  ctx.arc(centerX + size * 0.12, headY - size * 0.02, size * 0.035, 0, Math.PI * 2);
   ctx.fill();
 
-  ctx.fillStyle = player.grounded ? "#facc15" : "#bfdbfe";
-  ctx.fillRect(x + size * 0.16, y + size * 0.78, size * 0.68, 5);
+  ctx.strokeStyle = player.grounded ? "#facc15" : "#bfdbfe";
+  ctx.lineWidth = size * 0.08;
+  drawLimb(centerX - size * 0.2 + backLegSwing, footY - size * 0.06, centerX - size * 0.04 + backLegSwing, footY - size * 0.06);
+  drawLimb(centerX + size * 0.18 + legSwing, footY - size * 0.04, centerX + size * 0.34 + legSwing, footY - size * 0.04);
+  ctx.restore();
+}
+
+function drawLimb(startX, startY, endX, endY) {
+  ctx.beginPath();
+  ctx.moveTo(startX, startY);
+  ctx.lineTo(endX, endY);
+  ctx.stroke();
 }
 
 function drawObstacles() {
