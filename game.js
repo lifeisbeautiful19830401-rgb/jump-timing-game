@@ -2,6 +2,7 @@ const canvas = document.querySelector("#game");
 const ctx = canvas.getContext("2d");
 const scoreNode = document.querySelector("#score");
 const bestNode = document.querySelector("#best");
+const boostNode = document.querySelector("#boost");
 const overlay = document.querySelector("#overlay");
 const message = document.querySelector("#message");
 const startButton = document.querySelector("#startButton");
@@ -16,6 +17,8 @@ const state = {
   best: Number(localStorage.getItem(STORAGE_KEY) || 0),
   speed: 360,
   spawnTimer: 0,
+  powerTimer: 2.8,
+  boostTimer: 0,
   shake: 0,
 };
 
@@ -36,6 +39,7 @@ const player = {
 };
 
 const obstacles = [];
+const powerUps = [];
 const particles = [];
 
 bestNode.textContent = state.best;
@@ -53,7 +57,7 @@ function resize() {
   player.x = Math.max(58, world.width * 0.18);
   player.size = Math.max(30, Math.min(42, world.width * 0.095));
   if (player.grounded) {
-    player.y = world.groundY - player.size;
+    player.y = getGroundYAtScreen(player.x + player.size * 0.5) - player.size;
   }
 }
 
@@ -65,14 +69,18 @@ function reset() {
   state.score = 0;
   state.speed = 360;
   state.spawnTimer = 0.7;
+  state.powerTimer = 2.2;
+  state.boostTimer = 0;
   state.shake = 0;
   player.velocityY = 0;
   player.grounded = true;
   player.coyote = 0;
-  player.y = world.groundY - player.size;
+  player.y = getGroundYAtScreen(player.x + player.size * 0.5) - player.size;
   obstacles.length = 0;
+  powerUps.length = 0;
   particles.length = 0;
   scoreNode.textContent = "0";
+  boostNode.textContent = "0";
   overlay.classList.add("hidden");
 }
 
@@ -83,10 +91,10 @@ function jump() {
   }
 
   if (player.grounded || player.coyote > 0) {
-    player.velocityY = -720;
+    player.velocityY = state.boostTimer > 0 ? -940 : -720;
     player.grounded = false;
     player.coyote = 0;
-    burst(player.x + player.size * 0.5, player.y + player.size, "#bfdbfe", 9);
+    burst(player.x + player.size * 0.5, player.y + player.size, state.boostTimer > 0 ? "#38bdf8" : "#bfdbfe", 9);
   }
 }
 
@@ -94,15 +102,28 @@ function spawnObstacle() {
   const tall = Math.random() > 0.58;
   const width = tall ? 28 : 42;
   const height = tall ? 72 : 46;
+  const x = world.width + 28;
   obstacles.push({
-    x: world.width + 28,
-    y: world.groundY - height,
+    x,
+    y: getGroundYAtScreen(x + width * 0.5) - height,
     width,
     height,
     color: tall ? "#fb7185" : "#22c55e",
     passed: false,
   });
   state.spawnTimer = 0.92 + Math.random() * 0.72;
+}
+
+function spawnPowerUp() {
+  const x = world.width + 40;
+  powerUps.push({
+    x,
+    y: getGroundYAtScreen(x) - 126,
+    size: 24,
+    collected: false,
+    spin: 0,
+  });
+  state.powerTimer = 3.8 + Math.random() * 3.2;
 }
 
 function burst(x, y, color, amount) {
@@ -123,20 +144,29 @@ function update(dt) {
   state.distance += state.speed * dt;
   state.speed += dt * 8;
   state.spawnTimer -= dt;
+  state.powerTimer -= dt;
+  state.boostTimer = Math.max(0, state.boostTimer - dt);
   state.shake = Math.max(0, state.shake - dt * 22);
+  boostNode.textContent = state.boostTimer > 0 ? Math.ceil(state.boostTimer) : "0";
 
   if (state.spawnTimer <= 0) {
     spawnObstacle();
   }
 
-  player.velocityY += 2050 * dt;
+  if (state.powerTimer <= 0) {
+    spawnPowerUp();
+  }
+
+  const playerGroundY = getGroundYAtScreen(player.x + player.size * 0.5);
+
+  player.velocityY += (state.boostTimer > 0 ? 1880 : 2050) * dt;
   player.y += player.velocityY * dt;
 
-  if (player.y >= world.groundY - player.size) {
-    player.y = world.groundY - player.size;
+  if (player.y >= playerGroundY - player.size) {
+    player.y = playerGroundY - player.size;
     player.velocityY = 0;
     if (!player.grounded) {
-      burst(player.x + player.size * 0.5, world.groundY, "#facc15", 6);
+      burst(player.x + player.size * 0.5, playerGroundY, state.boostTimer > 0 ? "#38bdf8" : "#facc15", 6);
     }
     player.grounded = true;
     player.coyote = 0.08;
@@ -147,6 +177,7 @@ function update(dt) {
 
   for (const obstacle of obstacles) {
     obstacle.x -= state.speed * dt;
+    obstacle.y = getGroundYAtScreen(obstacle.x + obstacle.width * 0.5) - obstacle.height;
     if (!obstacle.passed && obstacle.x + obstacle.width < player.x) {
       obstacle.passed = true;
       state.score += 1;
@@ -156,6 +187,19 @@ function update(dt) {
 
   while (obstacles.length && obstacles[0].x + obstacles[0].width < -60) {
     obstacles.shift();
+  }
+
+  for (const powerUp of powerUps) {
+    powerUp.x -= state.speed * dt;
+    powerUp.y = getGroundYAtScreen(powerUp.x) - 126 + Math.sin(state.distance * 0.035 + powerUp.spin) * 8;
+    powerUp.spin += dt * 7;
+  }
+
+  for (let i = powerUps.length - 1; i >= 0; i -= 1) {
+    const powerUp = powerUps[i];
+    if (powerUp.x + powerUp.size < -60 || powerUp.collected) {
+      powerUps.splice(i, 1);
+    }
   }
 
   for (const particle of particles) {
@@ -173,6 +217,35 @@ function update(dt) {
 
   if (collides()) {
     endGame();
+  }
+
+  collectPowerUps();
+}
+
+function getGroundYAtScreen(screenX) {
+  const courseX = state.distance + screenX;
+  const longHill = Math.sin(courseX * 0.006) * 42;
+  const shortHill = Math.sin(courseX * 0.014 + 1.8) * 16;
+  return world.groundY + longHill + shortHill;
+}
+
+function collectPowerUps() {
+  const inset = player.size * 0.12;
+  const px = player.x + inset;
+  const py = player.y + inset;
+  const ps = player.size - inset * 2;
+
+  for (const powerUp of powerUps) {
+    if (
+      px < powerUp.x + powerUp.size &&
+      px + ps > powerUp.x &&
+      py < powerUp.y + powerUp.size &&
+      py + ps > powerUp.y
+    ) {
+      powerUp.collected = true;
+      state.boostTimer = 6;
+      burst(powerUp.x + powerUp.size * 0.5, powerUp.y + powerUp.size * 0.5, "#38bdf8", 18);
+    }
   }
 }
 
@@ -217,15 +290,33 @@ function drawBackground() {
   drawLayer("#1e3a8a", 0.28, 110, 0.42);
 
   ctx.fillStyle = "#334155";
-  ctx.fillRect(0, world.groundY, world.width, world.height - world.groundY);
+  ctx.beginPath();
+  ctx.moveTo(0, world.height);
+  ctx.lineTo(0, getGroundYAtScreen(0));
+  for (let x = 0; x <= world.width + 20; x += 20) {
+    ctx.lineTo(x, getGroundYAtScreen(x));
+  }
+  ctx.lineTo(world.width, world.height);
+  ctx.closePath();
+  ctx.fill();
 
   ctx.fillStyle = "#facc15";
-  ctx.fillRect(0, world.groundY, world.width, 6);
+  ctx.beginPath();
+  ctx.moveTo(0, getGroundYAtScreen(0));
+  for (let x = 0; x <= world.width + 20; x += 20) {
+    ctx.lineTo(x, getGroundYAtScreen(x));
+  }
+  ctx.lineTo(world.width, getGroundYAtScreen(world.width) + 6);
+  for (let x = world.width; x >= 0; x -= 20) {
+    ctx.lineTo(x, getGroundYAtScreen(x) + 6);
+  }
+  ctx.closePath();
+  ctx.fill();
 
   ctx.fillStyle = "rgba(255,255,255,0.1)";
   const stripeOffset = (state.distance * 0.8) % 62;
   for (let x = -stripeOffset; x < world.width; x += 62) {
-    ctx.fillRect(x, world.groundY + 30, 32, 5);
+    ctx.fillRect(x, getGroundYAtScreen(x) + 30, 32, 5);
   }
 }
 
@@ -264,6 +355,15 @@ function drawPlayer() {
   ctx.save();
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
+
+  if (state.boostTimer > 0) {
+    ctx.globalAlpha = 0.28 + Math.sin(state.distance * 0.08) * 0.08;
+    ctx.fillStyle = "#38bdf8";
+    ctx.beginPath();
+    ctx.arc(centerX, y + size * 0.54, size * 0.78, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }
 
   ctx.strokeStyle = "rgba(15, 23, 42, 0.34)";
   ctx.lineWidth = size * 0.12;
@@ -313,6 +413,29 @@ function drawObstacles() {
   }
 }
 
+function drawPowerUps() {
+  for (const powerUp of powerUps) {
+    const cx = powerUp.x + powerUp.size * 0.5;
+    const cy = powerUp.y + powerUp.size * 0.5;
+    const pulse = Math.sin(powerUp.spin) * 2;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(powerUp.spin);
+    ctx.fillStyle = "#38bdf8";
+    ctx.beginPath();
+    ctx.moveTo(0, -powerUp.size * 0.62 - pulse);
+    ctx.lineTo(powerUp.size * 0.52 + pulse, 0);
+    ctx.lineTo(0, powerUp.size * 0.62 + pulse);
+    ctx.lineTo(-powerUp.size * 0.52 - pulse, 0);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = "#f8fafc";
+    ctx.lineWidth = 3;
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
 function drawParticles() {
   for (const particle of particles) {
     ctx.globalAlpha = Math.max(0, particle.life * 1.8);
@@ -342,6 +465,7 @@ function render() {
   ctx.translate(shakeX, shakeY);
   drawBackground();
   drawObstacles();
+  drawPowerUps();
   drawPlayer();
   drawParticles();
   ctx.restore();
