@@ -47,6 +47,10 @@ canvas {
   min-width: 76px;
 }
 
+.hud div:nth-child(2) {
+  text-align: center;
+}
+
 .hud div:last-child {
   text-align: right;
 }
