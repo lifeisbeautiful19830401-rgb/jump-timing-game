@@ -104,6 +104,11 @@ function jump() {
 }
 
 function spawnObstacle() {
+  if (state.mode === "vertical") {
+    spawnVerticalObstacle();
+    return;
+  }
+
   const tall = Math.random() > 0.58;
   const width = tall ? 28 : 42;
   const height = tall ? 72 : 46;
@@ -119,7 +124,28 @@ function spawnObstacle() {
   state.spawnTimer = 0.92 + Math.random() * 0.72;
 }
 
+function spawnVerticalObstacle() {
+  const width = Math.max(88, world.width * (0.38 + Math.random() * 0.18));
+  const height = 26 + Math.random() * 14;
+  const x = world.width * 0.5 - width * 0.5 + (Math.random() - 0.5) * world.width * 0.18;
+  obstacles.push({
+    x,
+    y: -height - 40,
+    width,
+    height,
+    color: "#fb7185",
+    passed: false,
+    vertical: true,
+  });
+  state.spawnTimer = 1 + Math.random() * 0.45;
+}
+
 function spawnPowerUp() {
+  if (state.mode === "vertical") {
+    spawnVerticalPowerUp();
+    return;
+  }
+
   const x = world.width + 40;
   powerUps.push({
     x,
@@ -129,6 +155,18 @@ function spawnPowerUp() {
     spin: 0,
   });
   state.powerTimer = 3.8 + Math.random() * 3.2;
+}
+
+function spawnVerticalPowerUp() {
+  powerUps.push({
+    x: world.width * (0.36 + Math.random() * 0.28),
+    y: -48,
+    size: 24,
+    collected: false,
+    spin: 0,
+    vertical: true,
+  });
+  state.powerTimer = 4.6 + Math.random() * 3.6;
 }
 
 function burst(x, y, color, amount) {
@@ -156,10 +194,7 @@ function update(dt) {
   boostNode.textContent = state.boostTimer > 0 ? Math.ceil(state.boostTimer) : "0";
 
   if (state.mode === "horizontal" && state.distance >= state.modeDistance) {
-    state.mode = "vertical";
-    state.transitionTimer = 2.4;
-    state.shake = 8;
-    burst(player.x + player.size * 0.5, player.y + player.size * 0.5, "#38bdf8", 28);
+    switchToVerticalMode();
   }
 
   if (state.spawnTimer <= 0) {
@@ -168,6 +203,11 @@ function update(dt) {
 
   if (state.powerTimer <= 0) {
     spawnPowerUp();
+  }
+
+  if (state.mode === "vertical") {
+    updateVertical(dt);
+    return;
   }
 
   const playerGroundY = getGroundYAtScreen(player.x + player.size * 0.5);
@@ -211,6 +251,85 @@ function update(dt) {
   for (let i = powerUps.length - 1; i >= 0; i -= 1) {
     const powerUp = powerUps[i];
     if (powerUp.x + powerUp.size < -60 || powerUp.collected) {
+      powerUps.splice(i, 1);
+    }
+  }
+
+  for (const particle of particles) {
+    particle.x += particle.vx * dt;
+    particle.y += particle.vy * dt;
+    particle.vy += 480 * dt;
+    particle.life -= dt;
+  }
+
+  for (let i = particles.length - 1; i >= 0; i -= 1) {
+    if (particles[i].life <= 0) {
+      particles.splice(i, 1);
+    }
+  }
+
+  if (collides()) {
+    endGame();
+  }
+
+  collectPowerUps();
+}
+
+function switchToVerticalMode() {
+  state.mode = "vertical";
+  state.transitionTimer = 2.5;
+  state.shake = 8;
+  state.spawnTimer = 0.8;
+  state.powerTimer = 2.8;
+  player.x = world.width * 0.5 - player.size * 0.5;
+  player.y = world.height * 0.72 - player.size;
+  player.velocityY = 0;
+  player.grounded = true;
+  player.coyote = 0;
+  obstacles.length = 0;
+  powerUps.length = 0;
+  burst(player.x + player.size * 0.5, player.y + player.size * 0.5, "#38bdf8", 30);
+}
+
+function updateVertical(dt) {
+  const verticalGroundY = world.height * 0.72;
+  const targetX = world.width * 0.5 - player.size * 0.5;
+  player.x += (targetX - player.x) * Math.min(1, dt * 8);
+  player.velocityY += (state.boostTimer > 0 ? 1880 : 2050) * dt;
+  player.y += player.velocityY * dt;
+
+  if (player.y >= verticalGroundY - player.size) {
+    player.y = verticalGroundY - player.size;
+    player.velocityY = 0;
+    player.grounded = true;
+    player.coyote = 0.08;
+  } else {
+    player.grounded = false;
+    player.coyote = Math.max(0, player.coyote - dt);
+  }
+
+  for (const obstacle of obstacles) {
+    obstacle.y += state.speed * dt;
+    if (!obstacle.passed && obstacle.y > player.y + player.size) {
+      obstacle.passed = true;
+      state.score += 1;
+      scoreNode.textContent = state.score;
+    }
+  }
+
+  while (obstacles.length && obstacles[0].y > world.height + 80) {
+    obstacles.shift();
+  }
+
+  for (const powerUp of powerUps) {
+    powerUp.y += state.speed * dt;
+    powerUp.x += Math.sin(state.distance * 0.018 + powerUp.spin) * 32 * dt;
+    powerUp.spin += dt * 7;
+  }
+
+  for (let i = powerUps.length - 1; i >= 0; i -= 1) {
+    const powerUp = powerUps[i];
+    if (powerUp.y > world.height + 80 || powerUp.collected) {
       powerUps.splice(i, 1);
     }
   }
@@ -292,6 +411,11 @@ function endGame() {
 }
 
 function drawBackground() {
+  if (state.mode === "vertical") {
+    drawVerticalBackground();
+    return;
+  }
+
   const sky = ctx.createLinearGradient(0, 0, 0, world.height);
   sky.addColorStop(0, "#111827");
   sky.addColorStop(0.52, "#1d4ed8");
@@ -330,6 +454,31 @@ function drawBackground() {
   const stripeOffset = (state.distance * 0.8) % 62;
   for (let x = -stripeOffset; x < world.width; x += 62) {
     ctx.fillRect(x, getGroundYAtScreen(x) + 30, 32, 5);
+  }
+}
+
+function drawVerticalBackground() {
+  const sky = ctx.createLinearGradient(0, 0, 0, world.height);
+  sky.addColorStop(0, "#0f172a");
+  sky.addColorStop(0.55, "#1d4ed8");
+  sky.addColorStop(1, "#0f766e");
+  ctx.fillStyle = sky;
+  ctx.fillRect(0, 0, world.width, world.height);
+
+  const roadWidth = Math.min(world.width * 0.72, 360);
+  const roadX = world.width * 0.5 - roadWidth * 0.5;
+  ctx.fillStyle = "#334155";
+  roundRect(roadX, -20, roadWidth, world.height + 40, 8);
+  ctx.fill();
+
+  ctx.fillStyle = "#facc15";
+  ctx.fillRect(roadX, 0, 6, world.height);
+  ctx.fillRect(roadX + roadWidth - 6, 0, 6, world.height);
+
+  ctx.fillStyle = "rgba(255,255,255,0.16)";
+  const stripeOffset = (state.distance * 0.85) % 74;
+  for (let y = -stripeOffset; y < world.height + 74; y += 74) {
+    ctx.fillRect(world.width * 0.5 - 4, y, 8, 38);
   }
 }
 
@@ -422,7 +571,11 @@ function drawObstacles() {
     roundRect(obstacle.x, obstacle.y, obstacle.width, obstacle.height, 6);
     ctx.fill();
     ctx.fillStyle = "rgba(255,255,255,0.34)";
-    ctx.fillRect(obstacle.x + 5, obstacle.y + 6, Math.max(6, obstacle.width - 18), 5);
+    if (obstacle.vertical) {
+      ctx.fillRect(obstacle.x + 8, obstacle.y + obstacle.height * 0.5 - 3, Math.max(6, obstacle.width - 16), 6);
+    } else {
+      ctx.fillRect(obstacle.x + 5, obstacle.y + 6, Math.max(6, obstacle.width - 18), 5);
+    }
   }
 }
 
@@ -471,12 +624,18 @@ function roundRect(x, y, width, height, radius) {
   ctx.closePath();
 }
 
-function applyVerticalCamera() {
-  const pivotX = player.x + player.size * 0.5;
-  const pivotY = player.y + player.size * 0.5;
-  ctx.translate(world.width * 0.5, world.height * 0.7);
-  ctx.rotate(-Math.PI / 2);
-  ctx.translate(-pivotX, -pivotY);
+function render() {
+  const shakeX = state.shake ? (Math.random() - 0.5) * state.shake : 0;
+  const shakeY = state.shake ? (Math.random() - 0.5) * state.shake : 0;
+  ctx.save();
+  ctx.translate(shakeX, shakeY);
+  drawBackground();
+  drawObstacles();
+  drawPowerUps();
+  drawPlayer();
+  drawParticles();
+  ctx.restore();
+  drawModeNotice();
 }
 
 function drawModeNotice() {
@@ -485,36 +644,17 @@ function drawModeNotice() {
   }
   ctx.save();
   ctx.globalAlpha = Math.min(1, state.transitionTimer / 0.7);
-  ctx.fillStyle = "rgba(17, 24, 39, 0.52)";
-  ctx.fillRect(0, world.height * 0.42, world.width, 78);
+  ctx.fillStyle = "rgba(17, 24, 39, 0.56)";
+  ctx.fillRect(0, world.height * 0.42, world.width, 80);
   ctx.fillStyle = "#f8fafc";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.font = "900 28px system-ui, sans-serif";
-  ctx.fillText("VERTICAL MODE", world.width * 0.5, world.height * 0.42 + 32);
+  ctx.fillText("VERTICAL VIEW", world.width * 0.5, world.height * 0.42 + 32);
   ctx.font = "700 13px system-ui, sans-serif";
   ctx.fillStyle = "#bfdbfe";
-  ctx.fillText("タップで横にかわして進もう", world.width * 0.5, world.height * 0.42 + 56);
+  ctx.fillText("視点が変わった。上から来る障害物を跳び越えよう", world.width * 0.5, world.height * 0.42 + 58);
   ctx.restore();
-}
-
-function render() {
-  const shakeX = state.shake ? (Math.random() - 0.5) * state.shake : 0;
-  const shakeY = state.shake ? (Math.random() - 0.5) * state.shake : 0;
-  ctx.save();
-  ctx.fillStyle = "#111827";
-  ctx.fillRect(0, 0, world.width, world.height);
-  ctx.translate(shakeX, shakeY);
-  if (state.mode === "vertical") {
-    applyVerticalCamera();
-  }
-  drawBackground();
-  drawObstacles();
-  drawPowerUps();
-  drawPlayer();
-  drawParticles();
-  ctx.restore();
-  drawModeNotice();
 }
 
 function loop(time) {
