@@ -20,7 +20,7 @@ const state = {
   powerTimer: 2.8,
   boostTimer: 0,
   mode: "horizontal",
-  modeDistance: 1800,
+  modeDistance: 900,
   transitionTimer: 0,
   shake: 0,
 };
@@ -650,7 +650,7 @@ function drawModeNotice() {
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.font = "900 28px system-ui, sans-serif";
-  ctx.fillText("VERTICAL VIEW", world.width * 0.5, world.height * 0.42 + 32);
+  ctx.fillText("VIEW CHANGE", world.width * 0.5, world.height * 0.42 + 32);
   ctx.font = "700 13px system-ui, sans-serif";
   ctx.fillStyle = "#bfdbfe";
   ctx.fillText("視点が変わった。上から来る障害物を跳び越えよう", world.width * 0.5, world.height * 0.42 + 58);
