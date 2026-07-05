@@ -96,7 +96,8 @@ function jump() {
   }
 
   if (player.grounded || player.coyote > 0) {
-    player.velocityY = state.boostTimer > 0 ? -940 : -720;
+    const verticalBoost = state.mode === "vertical" ? 1.28 : 1;
+    player.velocityY = (state.boostTimer > 0 ? -940 : -720) * verticalBoost;
     player.grounded = false;
     player.coyote = 0;
     burst(player.x + player.size * 0.5, player.y + player.size, state.boostTimer > 0 ? "#38bdf8" : "#bfdbfe", 9);
@@ -126,7 +127,7 @@ function spawnObstacle() {
 
 function spawnVerticalObstacle() {
   const width = Math.max(88, world.width * (0.38 + Math.random() * 0.18));
-  const height = 26 + Math.random() * 14;
+  const height = 16 + Math.random() * 8;
   const x = world.width * 0.5 - width * 0.5 + (Math.random() - 0.5) * world.width * 0.18;
   obstacles.push({
     x,
@@ -137,7 +138,7 @@ function spawnVerticalObstacle() {
     passed: false,
     vertical: true,
   });
-  state.spawnTimer = 1 + Math.random() * 0.45;
+  state.spawnTimer = 1.15 + Math.random() * 0.55;
 }
 
 function spawnPowerUp() {
@@ -294,8 +295,9 @@ function switchToVerticalMode() {
 function updateVertical(dt) {
   const verticalGroundY = world.height * 0.72;
   const targetX = world.width * 0.5 - player.size * 0.5;
+  const verticalSpeed = state.speed * 0.62;
   player.x += (targetX - player.x) * Math.min(1, dt * 8);
-  player.velocityY += (state.boostTimer > 0 ? 1880 : 2050) * dt;
+  player.velocityY += (state.boostTimer > 0 ? 1500 : 1720) * dt;
   player.y += player.velocityY * dt;
 
   if (player.y >= verticalGroundY - player.size) {
@@ -309,11 +311,12 @@ function updateVertical(dt) {
   }
 
   for (const obstacle of obstacles) {
-    obstacle.y += state.speed * dt;
+    obstacle.y += verticalSpeed * dt;
     if (!obstacle.passed && obstacle.y > player.y + player.size) {
       obstacle.passed = true;
       state.score += 1;
       scoreNode.textContent = state.score;
+      burst(player.x + player.size * 0.5, player.y + player.size, "#facc15", 5);
     }
   }
 
@@ -387,12 +390,33 @@ function collides() {
   const py = player.y + inset;
   const ps = player.size - inset * 2;
 
-  return obstacles.some((obstacle) => (
-    px < obstacle.x + obstacle.width &&
-    px + ps > obstacle.x &&
-    py < obstacle.y + obstacle.height &&
-    py + ps > obstacle.y
-  ));
+  return obstacles.some((obstacle) => {
+    const overlap = (
+      px < obstacle.x + obstacle.width &&
+      px + ps > obstacle.x &&
+      py < obstacle.y + obstacle.height &&
+      py + ps > obstacle.y
+    );
+
+    if (!overlap) {
+      return false;
+    }
+
+    if (obstacle.vertical) {
+      const verticalGroundY = world.height * 0.72;
+      const feetY = player.y + player.size;
+      const jumpClearance = verticalGroundY - feetY;
+      const neededClearance = state.boostTimer > 0 ? player.size * 0.16 : player.size * 0.24;
+      const obstacleNearFeet = (
+        obstacle.y + obstacle.height > verticalGroundY - player.size * 0.2 &&
+        obstacle.y < verticalGroundY + player.size * 0.25
+      );
+
+      return obstacleNearFeet && jumpClearance < neededClearance;
+    }
+
+    return true;
+  });
 }
 
 function endGame() {
@@ -503,16 +527,17 @@ function drawPlayer() {
   const y = player.y;
   const size = player.size;
   const centerX = x + size * 0.5;
-  const headRadius = size * 0.18;
-  const headY = y + size * 0.16;
-  const shoulderY = y + size * 0.38;
-  const hipY = y + size * 0.66;
+  const headRadius = size * 0.17;
+  const headY = y + size * 0.17;
+  const neckY = y + size * 0.31;
+  const shoulderY = y + size * 0.39;
+  const hipY = y + size * 0.67;
   const footY = y + size;
-  const stride = player.grounded ? Math.sin(state.distance * 0.045) : 0.45;
-  const counterStride = -stride;
-  const armSwing = stride * size * 0.18;
-  const legSwing = stride * size * 0.2;
-  const backLegSwing = counterStride * size * 0.2;
+  const stride = player.grounded ? Math.sin(state.distance * 0.055) : 0.72;
+  const armSwing = stride * size * 0.2;
+  const legSwing = stride * size * 0.22;
+  const backLegSwing = -stride * size * 0.22;
+  const facing = state.mode === "vertical" ? 0 : 1;
 
   ctx.save();
   ctx.lineCap = "round";
@@ -527,34 +552,49 @@ function drawPlayer() {
     ctx.globalAlpha = 1;
   }
 
-  ctx.strokeStyle = "rgba(15, 23, 42, 0.34)";
-  ctx.lineWidth = size * 0.12;
-  drawLimb(centerX + size * 0.02, shoulderY, centerX - size * 0.2, y + size * 0.55 + armSwing);
-  drawLimb(centerX - size * 0.02, hipY, centerX - size * 0.12 + backLegSwing, footY - size * 0.06);
+  ctx.strokeStyle = "rgba(15, 23, 42, 0.32)";
+  ctx.lineWidth = size * 0.11;
+  drawLimb(centerX - size * 0.05, shoulderY, centerX - size * 0.22, y + size * 0.56 + armSwing);
+  drawLimb(centerX - size * 0.04, hipY, centerX - size * 0.2 + backLegSwing, footY - size * 0.11);
 
   ctx.strokeStyle = "#facc15";
-  ctx.lineWidth = size * 0.1;
-  drawLimb(centerX + size * 0.02, shoulderY, centerX + size * 0.25, y + size * 0.55 - armSwing);
-  drawLimb(centerX + size * 0.02, hipY, centerX + size * 0.18 + legSwing, footY - size * 0.04);
+  ctx.lineWidth = size * 0.095;
+  drawLimb(centerX + size * 0.05, shoulderY, centerX + size * 0.24, y + size * 0.54 - armSwing);
+  drawLimb(centerX + size * 0.04, hipY, centerX + size * 0.2 + legSwing, footY - size * 0.1);
 
-  ctx.strokeStyle = "#f8fafc";
-  ctx.lineWidth = size * 0.14;
-  drawLimb(centerX, shoulderY, centerX + size * 0.03, hipY);
+  ctx.strokeStyle = "#1e293b";
+  ctx.lineWidth = size * 0.105;
+  drawLimb(centerX - size * 0.2 + backLegSwing, footY - size * 0.1, centerX - size * 0.34 + backLegSwing, footY - size * 0.04);
+  drawLimb(centerX + size * 0.2 + legSwing, footY - size * 0.1, centerX + size * 0.35 + legSwing, footY - size * 0.04);
+
+  ctx.fillStyle = "#2563eb";
+  roundRect(centerX - size * 0.18, neckY, size * 0.38, size * 0.38, size * 0.11);
+  ctx.fill();
 
   ctx.fillStyle = "#f8fafc";
+  roundRect(centerX - size * 0.13, shoulderY, size * 0.29, size * 0.28, size * 0.08);
+  ctx.fill();
+
+  ctx.fillStyle = "#f2c7a5";
   ctx.beginPath();
-  ctx.arc(centerX + size * 0.04, headY, headRadius, 0, Math.PI * 2);
+  ctx.arc(centerX + size * 0.03 * facing, headY, headRadius, 0, Math.PI * 2);
   ctx.fill();
 
   ctx.fillStyle = "#111827";
   ctx.beginPath();
-  ctx.arc(centerX + size * 0.12, headY - size * 0.02, size * 0.035, 0, Math.PI * 2);
+  ctx.arc(centerX - size * 0.02, headY - size * 0.11, headRadius * 0.95, Math.PI, Math.PI * 2);
   ctx.fill();
 
-  ctx.strokeStyle = player.grounded ? "#facc15" : "#bfdbfe";
-  ctx.lineWidth = size * 0.08;
-  drawLimb(centerX - size * 0.2 + backLegSwing, footY - size * 0.06, centerX - size * 0.04 + backLegSwing, footY - size * 0.06);
-  drawLimb(centerX + size * 0.18 + legSwing, footY - size * 0.04, centerX + size * 0.34 + legSwing, footY - size * 0.04);
+  ctx.fillStyle = "#111827";
+  ctx.beginPath();
+  ctx.arc(centerX + size * 0.09, headY - size * 0.02, size * 0.025, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.strokeStyle = "#7f1d1d";
+  ctx.lineWidth = size * 0.018;
+  ctx.beginPath();
+  ctx.arc(centerX + size * 0.07, headY + size * 0.04, size * 0.05, 0.15, 1.3);
+  ctx.stroke();
   ctx.restore();
 }
 
