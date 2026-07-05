@@ -19,6 +19,9 @@ const state = {
   spawnTimer: 0,
   powerTimer: 2.8,
   boostTimer: 0,
+  mode: "horizontal",
+  modeDistance: 1800,
+  transitionTimer: 0,
   shake: 0,
 };
 
@@ -71,6 +74,8 @@ function reset() {
   state.spawnTimer = 0.7;
   state.powerTimer = 2.2;
   state.boostTimer = 0;
+  state.mode = "horizontal";
+  state.transitionTimer = 0;
   state.shake = 0;
   player.velocityY = 0;
   player.grounded = true;
@@ -146,8 +151,16 @@ function update(dt) {
   state.spawnTimer -= dt;
   state.powerTimer -= dt;
   state.boostTimer = Math.max(0, state.boostTimer - dt);
+  state.transitionTimer = Math.max(0, state.transitionTimer - dt);
   state.shake = Math.max(0, state.shake - dt * 22);
   boostNode.textContent = state.boostTimer > 0 ? Math.ceil(state.boostTimer) : "0";
+
+  if (state.mode === "horizontal" && state.distance >= state.modeDistance) {
+    state.mode = "vertical";
+    state.transitionTimer = 2.4;
+    state.shake = 8;
+    burst(player.x + player.size * 0.5, player.y + player.size * 0.5, "#38bdf8", 28);
+  }
 
   if (state.spawnTimer <= 0) {
     spawnObstacle();
@@ -458,17 +471,50 @@ function roundRect(x, y, width, height, radius) {
   ctx.closePath();
 }
 
+function applyVerticalCamera() {
+  const pivotX = player.x + player.size * 0.5;
+  const pivotY = player.y + player.size * 0.5;
+  ctx.translate(world.width * 0.5, world.height * 0.7);
+  ctx.rotate(-Math.PI / 2);
+  ctx.translate(-pivotX, -pivotY);
+}
+
+function drawModeNotice() {
+  if (state.transitionTimer <= 0) {
+    return;
+  }
+  ctx.save();
+  ctx.globalAlpha = Math.min(1, state.transitionTimer / 0.7);
+  ctx.fillStyle = "rgba(17, 24, 39, 0.52)";
+  ctx.fillRect(0, world.height * 0.42, world.width, 78);
+  ctx.fillStyle = "#f8fafc";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.font = "900 28px system-ui, sans-serif";
+  ctx.fillText("VERTICAL MODE", world.width * 0.5, world.height * 0.42 + 32);
+  ctx.font = "700 13px system-ui, sans-serif";
+  ctx.fillStyle = "#bfdbfe";
+  ctx.fillText("タップで横にかわして進もう", world.width * 0.5, world.height * 0.42 + 56);
+  ctx.restore();
+}
+
 function render() {
   const shakeX = state.shake ? (Math.random() - 0.5) * state.shake : 0;
   const shakeY = state.shake ? (Math.random() - 0.5) * state.shake : 0;
   ctx.save();
+  ctx.fillStyle = "#111827";
+  ctx.fillRect(0, 0, world.width, world.height);
   ctx.translate(shakeX, shakeY);
+  if (state.mode === "vertical") {
+    applyVerticalCamera();
+  }
   drawBackground();
   drawObstacles();
   drawPowerUps();
   drawPlayer();
   drawParticles();
   ctx.restore();
+  drawModeNotice();
 }
 
 function loop(time) {
