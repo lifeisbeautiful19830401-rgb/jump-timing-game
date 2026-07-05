@@ -522,6 +522,53 @@ function drawLayer(color, factor, height, base) {
   }
 }
 
+function getPlayerGroundY() {
+  if (state.mode === "vertical") {
+    return world.height * 0.72;
+  }
+
+  return getGroundYAtScreen(player.x + player.size * 0.5);
+}
+
+function drawPlayerShadow() {
+  const size = player.size;
+  const centerX = player.x + size * 0.5;
+  const groundY = getPlayerGroundY();
+  const feetY = player.y + size;
+  const jumpHeight = Math.max(0, groundY - feetY);
+  const maxVisualHeight = size * 2.25;
+  const heightRatio = Math.min(1, jumpHeight / maxVisualHeight);
+  const shadowWidth = size * (0.9 - heightRatio * 0.42);
+  const shadowHeight = Math.max(size * 0.09, size * (0.2 - heightRatio * 0.08));
+
+  ctx.save();
+  ctx.globalAlpha = 0.36 - heightRatio * 0.18;
+  ctx.fillStyle = "#020617";
+  ctx.beginPath();
+  ctx.ellipse(centerX, groundY + size * 0.04, shadowWidth, shadowHeight, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+
+  if (state.mode === "vertical" && jumpHeight > size * 0.12) {
+    const lineX = centerX + size * 0.62;
+    const lineTop = feetY;
+    const lineBottom = groundY;
+
+    ctx.strokeStyle = "rgba(191, 219, 254, 0.82)";
+    ctx.lineWidth = Math.max(3, size * 0.08);
+    ctx.beginPath();
+    ctx.moveTo(lineX, lineBottom);
+    ctx.lineTo(lineX, lineTop);
+    ctx.stroke();
+
+    ctx.fillStyle = heightRatio > 0.55 ? "#22c55e" : "#facc15";
+    roundRect(lineX - size * 0.1, lineTop - size * 0.16, size * 0.2, size * 0.16, size * 0.05);
+    ctx.fill();
+  }
+
+  ctx.restore();
+}
+
 function drawPlayer() {
   const x = player.x;
   const y = player.y;
@@ -672,6 +719,7 @@ function render() {
   drawBackground();
   drawObstacles();
   drawPowerUps();
+  drawPlayerShadow();
   drawPlayer();
   drawParticles();
   ctx.restore();
