@@ -20,7 +20,8 @@ const state = {
   powerTimer: 2.8,
   boostTimer: 0,
   mode: "horizontal",
-  modeDistance: 900,
+  modeSwitchDistance: 900,
+  modeSegmentLength: 900,
   transitionTimer: 0,
   shake: 0,
 };
@@ -57,10 +58,10 @@ function resize() {
   canvas.style.height = `${world.height}px`;
   ctx.setTransform(world.ratio, 0, 0, world.ratio, 0, 0);
   world.groundY = Math.max(230, world.height * 0.76);
-  player.x = Math.max(58, world.width * 0.18);
   player.size = Math.max(30, Math.min(42, world.width * 0.095));
+  player.x = state.mode === "vertical" ? world.width * 0.5 - player.size * 0.5 : Math.max(58, world.width * 0.18);
   if (player.grounded) {
-    player.y = getGroundYAtScreen(player.x + player.size * 0.5) - player.size;
+    player.y = getPlayerGroundY() - player.size;
   }
 }
 
@@ -75,6 +76,8 @@ function reset() {
   state.powerTimer = 2.2;
   state.boostTimer = 0;
   state.mode = "horizontal";
+  state.modeSwitchDistance = 900;
+  state.modeSegmentLength = 900;
   state.transitionTimer = 0;
   state.shake = 0;
   player.velocityY = 0;
@@ -194,8 +197,12 @@ function update(dt) {
   state.shake = Math.max(0, state.shake - dt * 22);
   boostNode.textContent = state.boostTimer > 0 ? Math.ceil(state.boostTimer) : "0";
 
-  if (state.mode === "horizontal" && state.distance >= state.modeDistance) {
-    switchToVerticalMode();
+  if (state.distance >= state.modeSwitchDistance) {
+    if (state.mode === "horizontal") {
+      switchToVerticalMode();
+    } else {
+      switchToHorizontalMode();
+    }
   }
 
   if (state.spawnTimer <= 0) {
@@ -278,6 +285,8 @@ function update(dt) {
 
 function switchToVerticalMode() {
   state.mode = "vertical";
+  state.modeSegmentLength = 760;
+  state.modeSwitchDistance = state.distance + state.modeSegmentLength;
   state.transitionTimer = 2.5;
   state.shake = 8;
   state.spawnTimer = 0.8;
@@ -290,6 +299,24 @@ function switchToVerticalMode() {
   obstacles.length = 0;
   powerUps.length = 0;
   burst(player.x + player.size * 0.5, player.y + player.size * 0.5, "#38bdf8", 30);
+}
+
+function switchToHorizontalMode() {
+  state.mode = "horizontal";
+  state.modeSegmentLength = 1000;
+  state.modeSwitchDistance = state.distance + state.modeSegmentLength;
+  state.transitionTimer = 2.5;
+  state.shake = 8;
+  state.spawnTimer = 0.75;
+  state.powerTimer = 2.4;
+  player.x = Math.max(58, world.width * 0.18);
+  player.y = getGroundYAtScreen(player.x + player.size * 0.5) - player.size;
+  player.velocityY = 0;
+  player.grounded = true;
+  player.coyote = 0;
+  obstacles.length = 0;
+  powerUps.length = 0;
+  burst(player.x + player.size * 0.5, player.y + player.size * 0.5, "#facc15", 30);
 }
 
 function updateVertical(dt) {
@@ -723,7 +750,49 @@ function render() {
   drawPlayer();
   drawParticles();
   ctx.restore();
+  drawModeGauge();
   drawModeNotice();
+}
+
+function drawModeGauge() {
+  if (!state.running) {
+    return;
+  }
+
+  const margin = Math.max(14, world.width * 0.035);
+  const width = Math.min(170, Math.max(118, world.width * 0.32));
+  const height = 12;
+  const x = world.width - margin - width;
+  const y = Math.max(74, world.height * 0.095);
+  const remaining = Math.max(0, state.modeSwitchDistance - state.distance);
+  const ratio = Math.max(0, Math.min(1, remaining / state.modeSegmentLength));
+  const fillWidth = width * ratio;
+  const nextLabel = state.mode === "horizontal" ? "NEXT: VERTICAL" : "NEXT: HORIZONTAL";
+
+  ctx.save();
+  ctx.fillStyle = "rgba(15, 23, 42, 0.62)";
+  roundRect(x - 10, y - 24, width + 20, 48, 8);
+  ctx.fill();
+
+  ctx.fillStyle = "#e0f2fe";
+  ctx.font = "800 10px system-ui, sans-serif";
+  ctx.textAlign = "left";
+  ctx.textBaseline = "middle";
+  ctx.fillText(nextLabel, x, y - 10);
+
+  ctx.fillStyle = "rgba(226, 232, 240, 0.24)";
+  roundRect(x, y + 2, width, height, 6);
+  ctx.fill();
+
+  ctx.fillStyle = state.mode === "horizontal" ? "#38bdf8" : "#facc15";
+  roundRect(x, y + 2, fillWidth, height, 6);
+  ctx.fill();
+
+  ctx.strokeStyle = "rgba(248, 250, 252, 0.55)";
+  ctx.lineWidth = 1;
+  roundRect(x, y + 2, width, height, 6);
+  ctx.stroke();
+  ctx.restore();
 }
 
 function drawModeNotice() {
@@ -738,10 +807,10 @@ function drawModeNotice() {
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.font = "900 28px system-ui, sans-serif";
-  ctx.fillText("VIEW CHANGE", world.width * 0.5, world.height * 0.42 + 32);
+  ctx.fillText(state.mode === "vertical" ? "VERTICAL VIEW" : "HORIZONTAL VIEW", world.width * 0.5, world.height * 0.42 + 32);
   ctx.font = "700 13px system-ui, sans-serif";
   ctx.fillStyle = "#bfdbfe";
-  ctx.fillText("視点が変わった。上から来る障害物を跳び越えよう", world.width * 0.5, world.height * 0.42 + 58);
+  ctx.fillText(state.mode === "vertical" ? "上から来る障害物を跳び越えよう" : "横スクロールに戻った。地面を見て跳ぼう", world.width * 0.5, world.height * 0.42 + 58);
   ctx.restore();
 }
 
